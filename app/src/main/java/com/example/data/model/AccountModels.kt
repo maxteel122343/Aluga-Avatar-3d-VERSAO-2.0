@@ -37,7 +37,15 @@ data class AccountCredentials(
   val pin: String = "4892",
   val server: String = "BR-SUL-01",
   val profileAssigned: String = "Perfil #2 (Privado)",
-  val rules: String = "Não trocar a senha principal. Usar apenas o perfil atribuído. Não compartilhar com terceiros."
+  val rules: String = "Compartilhar a senha com terceiros resulta em banimento permanente."
+)
+
+data class CredentialHistoryItem(
+  val id: String,
+  val accountId: String,
+  val username: String,
+  val password: String,
+  val changedAt: String
 )
 
 data class SharedAccount(
@@ -60,8 +68,17 @@ data class SharedAccount(
   val itemsIncluded: List<IncludedItem> = emptyList(),
   val credentials: AccountCredentials,
   val isOccupied: Boolean = false,
-  val createdBy: String? = null
-)
+  val createdBy: String? = null,
+  val isActive: Boolean = true,
+  val credentialUpdatedAt: Long = 0L,
+  val customDiscountPercent: Int = 0
+) {
+  val isAlmostFull: Boolean
+    get() = !isOccupied && currentUsers == (maxUsers - 1) && maxUsers > 1
+
+  val spotsLeft: Int
+    get() = (maxUsers - currentUsers).coerceAtLeast(0)
+}
 
 data class RentalCalculation(
   val days: Int,
@@ -89,13 +106,15 @@ data class ActiveRental(
   val status: String = "ACTIVE"
 ) {
   fun isExpired(): Boolean {
-    if (status.equals("EXPIRED", ignoreCase = true)) return true
+    if (status.equals("EXPIRED", ignoreCase = true) || status.equals("CANCELLED", ignoreCase = true)) {
+      return true
+    }
     val totalDurationMillis = durationDays.toLong() * 24 * 60 * 60 * 1000L
     return (System.currentTimeMillis() - startTimeMillis) >= totalDurationMillis
   }
 
   fun remainingMillis(): Long {
-    if (status.equals("EXPIRED", ignoreCase = true)) return 0L
+    if (isExpired()) return 0L
     val totalDurationMillis = durationDays.toLong() * 24 * 60 * 60 * 1000L
     val diff = totalDurationMillis - (System.currentTimeMillis() - startTimeMillis)
     return if (diff > 0) diff else 0L

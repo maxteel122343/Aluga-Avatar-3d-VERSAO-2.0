@@ -94,10 +94,11 @@ fun FeedScreen(
   val categories = listOf("Todas", "Aventura & RPG", "Streaming & Jogos", "Ficção & Ação")
 
   val filteredAccounts = accounts.filter { acc ->
+    val isActive = acc.isActive
     val matchesSearch = acc.title.contains(searchQuery, ignoreCase = true) ||
         acc.description.contains(searchQuery, ignoreCase = true)
     val matchesCategory = selectedCategory == "Todas" || acc.category.equals(selectedCategory, ignoreCase = true)
-    matchesSearch && matchesCategory
+    isActive && matchesSearch && matchesCategory
   }
 
   Scaffold(
@@ -259,15 +260,21 @@ fun AccountFeedCard(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
+        val (pillBg, pillTextColor, pillText) = when {
+          account.isOccupied -> Triple(Color(0xFFFEE2E2), Color(0xFFDC2626), "ALUGADA • Limite Atingido")
+          account.isAlmostFull -> Triple(Color(0xFFFEF3C7), Color(0xFFD97706), "🔥 ÚLTIMA VAGA! (${account.currentUsers}/${account.maxUsers})")
+          else -> Triple(GreenTagBg, GreenTagText, "Disponível (${account.spotsLeft} vagas restantes)")
+        }
+
         Surface(
-          color = if (account.isOccupied) Color(0xFFFEE2E2) else GreenTagBg,
+          color = pillBg,
           shape = RoundedCornerShape(20.dp)
         ) {
           Text(
-            text = if (account.isOccupied) "ALUGADA • Limite Atingido" else "Disponível (${account.currentUsers}/${account.maxUsers} usando)",
+            text = pillText,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = if (account.isOccupied) Color(0xFFDC2626) else GreenTagText,
+            color = pillTextColor,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
           )
         }

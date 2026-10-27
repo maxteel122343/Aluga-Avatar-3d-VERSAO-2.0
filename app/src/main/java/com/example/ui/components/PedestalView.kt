@@ -71,6 +71,8 @@ fun PedestalView(
   avatarUrl: String = "",
   model3dUrl: String = "",
   selectedItem: IncludedItem?,
+  isOccupied: Boolean = false,
+  currentUsers: Int = 1,
   onRentClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -373,7 +375,7 @@ fun PedestalView(
     Button(
       onClick = onRentClick,
       colors = ButtonDefaults.buttonColors(
-        containerColor = BluePrimary,
+        containerColor = if (isOccupied) Color(0xFFEF4444) else BluePrimary,
         contentColor = White
       ),
       shape = RoundedCornerShape(14.dp),
@@ -392,7 +394,7 @@ fun PedestalView(
       )
       Spacer(modifier = Modifier.width(8.dp))
       Text(
-        text = "Alugar",
+        text = if (isOccupied) "Lotada" else "Alugar",
         fontSize = 15.sp,
         fontWeight = FontWeight.Bold,
         color = White

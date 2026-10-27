@@ -366,99 +366,146 @@ fun ActiveRentalCard(
 
       Spacer(modifier = Modifier.height(14.dp))
 
-      // Credentials Details
-      Surface(
-        color = Gray50,
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Gray200),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-          // Login
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+      // Credentials Details or Locked State if Expired
+      if (isExpired) {
+        Surface(
+          color = Color(0xFFFEF2F2),
+          shape = RoundedCornerShape(14.dp),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(
+            modifier = Modifier.padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
           ) {
-            Column {
-              Text(text = "USUÁRIO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Gray500)
-              Text(
-                text = rental.credentials.username,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Gray900,
-                fontFamily = FontFamily.Monospace
-              )
-            }
-            IconButton(
-              onClick = {
-                clipboardManager.setText(AnnotatedString(rental.credentials.username))
-                Toast.makeText(context, "Usuário copiado!", Toast.LENGTH_SHORT).show()
-              },
-              modifier = Modifier.size(32.dp)
-            ) {
-              Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copiar", tint = BluePrimary, modifier = Modifier.size(16.dp))
-            }
+            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(28.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+            Text("Acesso Expirado e Bloqueado", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFFDC2626))
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              text = "O prazo deste aluguel encerrou. As credenciais antigas foram desativadas e a vaga foi liberada. Renove seu aluguel para obter novas credenciais atualizadas.",
+              fontSize = 11.sp,
+              color = Gray700,
+              textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+              lineHeight = 15.sp
+            )
           }
+        }
+      } else {
+        // Ban Warning Banner
+        Surface(
+          color = Color(0xFFFEF2F2),
+          shape = RoundedCornerShape(10.dp),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA)),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+        ) {
+          Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+              text = "Aviso: Compartilhar a senha com terceiros resulta em banimento permanente.",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = Color(0xFFDC2626)
+            )
+          }
+        }
 
-          Spacer(modifier = Modifier.height(8.dp))
-
-          // Password
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column {
-              Text(text = "SENHA", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Gray500)
-              Text(
-                text = if (showPassword) rental.credentials.password else "••••••••••••",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Gray900,
-                fontFamily = FontFamily.Monospace
-              )
-            }
-            Row {
-              IconButton(onClick = { showPassword = !showPassword }, modifier = Modifier.size(32.dp)) {
-                Icon(
-                  imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                  contentDescription = null,
-                  tint = Gray500,
-                  modifier = Modifier.size(16.dp)
+        Surface(
+          color = Gray50,
+          shape = RoundedCornerShape(14.dp),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Gray200),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Column(modifier = Modifier.padding(14.dp)) {
+            // Login
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Column {
+                Text(text = "USUÁRIO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Gray500)
+                Text(
+                  text = rental.credentials.username,
+                  fontSize = 14.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Gray900,
+                  fontFamily = FontFamily.Monospace
                 )
               }
               IconButton(
                 onClick = {
-                  clipboardManager.setText(AnnotatedString(rental.credentials.password))
-                  Toast.makeText(context, "Senha copiada!", Toast.LENGTH_SHORT).show()
+                  clipboardManager.setText(AnnotatedString(rental.credentials.username))
+                  Toast.makeText(context, "Usuário copiado!", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.size(32.dp)
               ) {
                 Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copiar", tint = BluePrimary, modifier = Modifier.size(16.dp))
               }
             }
-          }
 
-          Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-          // PIN & Profile
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Text(
-              text = "PIN: ${rental.credentials.pin}",
-              fontSize = 12.sp,
-              fontWeight = FontWeight.Medium,
-              color = Gray700
-            )
-            Text(
-              text = rental.credentials.profileAssigned,
-              fontSize = 12.sp,
-              fontWeight = FontWeight.Bold,
-              color = GreenIcon
-            )
+            // Password
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Column {
+                Text(text = "SENHA", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Gray500)
+                Text(
+                  text = if (showPassword) rental.credentials.password else "••••••••••••",
+                  fontSize = 14.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Gray900,
+                  fontFamily = FontFamily.Monospace
+                )
+              }
+              Row {
+                IconButton(onClick = { showPassword = !showPassword }, modifier = Modifier.size(32.dp)) {
+                  Icon(
+                    imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = null,
+                    tint = Gray500,
+                    modifier = Modifier.size(16.dp)
+                  )
+                }
+                IconButton(
+                  onClick = {
+                    clipboardManager.setText(AnnotatedString(rental.credentials.password))
+                    Toast.makeText(context, "Senha copiada!", Toast.LENGTH_SHORT).show()
+                  },
+                  modifier = Modifier.size(32.dp)
+                ) {
+                  Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copiar", tint = BluePrimary, modifier = Modifier.size(16.dp))
+                }
+              }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // PIN & Profile
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Text(
+                text = "PIN: ${rental.credentials.pin}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Gray700
+              )
+              Text(
+                text = rental.credentials.profileAssigned,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = GreenIcon
+              )
+            }
           }
         }
       }

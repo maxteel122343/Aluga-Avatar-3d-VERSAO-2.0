@@ -6,6 +6,7 @@ import com.example.R
 import com.example.data.auth.SessionManager
 import com.example.data.model.AccountCredentials
 import com.example.data.model.ActiveRental
+import com.example.data.model.CredentialHistoryItem
 import com.example.data.model.InAppNotification
 import com.example.data.model.IncludedItem
 import com.example.data.model.NotificationType
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.UUID
 
@@ -102,15 +104,14 @@ class AccountRepository(private val context: Context) {
 
             postNotification(
               title = "Aluguel Expirado",
-              message = "O tempo de aluguel da conta '${rental.accountTitle}' expirou. O acesso foi finalizado.",
+              message = "O tempo de aluguel da conta '${rental.accountTitle}' expirou. O acesso às credenciais foi bloqueado.",
               type = NotificationType.WARNING
             )
           } else if (remaining < 24 * 60 * 60 * 1000L) {
-            // Expiring soon (< 24h)
             val hours = (remaining / (60 * 60 * 1000L)).coerceAtLeast(1)
             postNotification(
               title = "Aluguel Expirando",
-              message = "Seu aluguel da conta '${rental.accountTitle}' expira em cerca de ${hours}h. Renove para não perder o acesso!",
+              message = "Atenção: O aluguel da conta '${rental.accountTitle}' expira em cerca de ${hours}h. Renove para não perder o acesso!",
               type = NotificationType.INFO
             )
           }
@@ -119,8 +120,16 @@ class AccountRepository(private val context: Context) {
     }
   }
 
+  fun generateSecurePassword(): String {
+    val prefixes = listOf("Cyber", "Alpha", "Safe", "Titan", "Vip", "Pro", "Shield", "Neon")
+    val symbols = listOf("!", "@", "#", "$", "*")
+    val randomPrefix = prefixes.random()
+    val randomNum = (1000..9999).random()
+    val randomSymbol = symbols.random()
+    return "$randomPrefix$randomSymbol$randomNum"
+  }
+
   fun postNotification(title: String, message: String, type: NotificationType = NotificationType.INFO) {
-    // Avoid duplicate notifications with same title
     if (_inAppNotifications.value.none { it.title == title }) {
       val notification = InAppNotification(
         id = UUID.randomUUID().toString(),
@@ -152,7 +161,6 @@ class AccountRepository(private val context: Context) {
       } else acc
     }
 
-    // Persist to Supabase
     scope.launch(Dispatchers.IO) {
       supabase.toggleLike(accountId, updatedLikes)
     }
@@ -178,7 +186,7 @@ class AccountRepository(private val context: Context) {
     val discountPercent: Int
     val rawTotal: Double
 
-    if (account.id == "acc_primary" && days == 3 && people == 2) {
+    if (account.id == "acc_primary" && days == 3 && people == 2 && account.customDiscountPercent == 0) {
       finalPrice = 149.90
       discountPercent = 25
       rawTotal = 199.90
@@ -189,7 +197,10 @@ class AccountRepository(private val context: Context) {
       if (days >= 7) disc += 10
       if (people >= 2) disc += 5
       if (people >= 3) disc += 5
-      disc = disc.coerceAtMost(45)
+      if (account.customDiscountPercent > 0) {
+        disc += account.customDiscountPercent
+      }
+      disc = disc.coerceAtMost(55)
 
       discountPercent = disc
       rawTotal = baseCost * 1.30
@@ -253,17 +264,17 @@ class AccountRepository(private val context: Context) {
       itemsIncluded = defaultItems,
       credentials = AccountCredentials(
         username = username.ifBlank { "user_shared_" + (100..999).random() },
-        password = pass.ifBlank { "Pass@" + (1000..9999).random() },
+        password = pass.ifBlank { generateSecurePassword() },
         pin = (1000..9999).random().toString(),
         server = "BR-Sudeste Cloud",
         profileAssigned = "Perfil Privado #" + (1..maxPeople).random(),
-        rules = "Não alterar a senha principal nem compartilhar credenciais com terceiros."
+        rules = "Compartilhar a senha com terceiros resulta em banimento permanente."
       ),
       isOccupied = false,
-      createdBy = currentUserId
+      createdBy = currentUserId,
+      isActive = true
     )
 
-    // Save to Supabase
     val insertResult = supabase.insertAccount(newAccount, token)
     if (insertResult.isFailure) {
       Log.w(tag, "Supabase insert failed, keeping local fallback", insertResult.exceptionOrNull())
@@ -272,11 +283,100 @@ class AccountRepository(private val context: Context) {
     _accounts.value = listOf(newAccount) + _accounts.value
     postNotification(
       title = "Conta Criada!",
-      message = "O card '${newAccount.title}' foi publicado com sucesso no Supabase.",
+      message = "O card '${newAccount.title}' foi publicado com sucesso no Feed.",
       type = NotificationType.SUCCESS
     )
 
     return Result.success(newAccount)
+  }
+
+  suspend fun updateCredentials(
+    accountId: String,
+    newUsername: String,
+    newPass: String
+  ): Result<Boolean> {
+    val currentUserId = sessionManager.currentSession.value?.userId
+
+    // Update locally
+    _accounts.value = _accounts.value.map { acc ->
+      if (acc.id == accountId) {
+        acc.copy(
+          credentials = acc.credentials.copy(
+            username = newUsername,
+            password = newPass
+          )
+        )
+      } else acc
+    }
+
+    val res = supabase.updateAccountCredentials(accountId, newUsername, newPass, currentUserId)
+    if (res.isSuccess) {
+      postNotification(
+        title = "Credenciais Atualizadas",
+        message = "As novas credenciais foram salvas no Supabase e passam a valer para os próximos aluguéis.",
+        type = NotificationType.SUCCESS
+      )
+    }
+    return res
+  }
+
+  suspend fun toggleCardActive(accountId: String, isActive: Boolean): Result<Boolean> {
+    _accounts.value = _accounts.value.map { acc ->
+      if (acc.id == accountId) acc.copy(isActive = isActive) else acc
+    }
+
+    val res = supabase.toggleAccountActive(accountId, isActive)
+    postNotification(
+      title = if (isActive) "Card Ativado" else "Card Desativado",
+      message = if (isActive) "O card agora aparece normalmente no Feed público." else "O card foi ocultado do Feed.",
+      type = NotificationType.INFO
+    )
+    return res
+  }
+
+  suspend fun deleteAccount(accountId: String): Result<Boolean> {
+    val acc = _accounts.value.find { it.id == accountId }
+    _accounts.value = _accounts.value.filterNot { it.id == accountId }
+
+    val res = supabase.deleteAccount(accountId)
+    postNotification(
+      title = "Card Removido",
+      message = "O card '${acc?.title ?: ""}' foi excluído do Supabase.",
+      type = NotificationType.INFO
+    )
+    return res
+  }
+
+  suspend fun updatePricing(
+    accountId: String,
+    basePrice: Double,
+    customDiscount: Int
+  ): Result<Boolean> {
+    _accounts.value = _accounts.value.map { acc ->
+      if (acc.id == accountId) {
+        acc.copy(
+          basePricePerDay = basePrice,
+          customDiscountPercent = customDiscount
+        )
+      } else acc
+    }
+    val res = supabase.updateAccountPricing(accountId, basePrice, customDiscount)
+    postNotification(
+      title = "Preços Atualizados",
+      message = "Regras de preço e desconto progressivo salvas com sucesso.",
+      type = NotificationType.SUCCESS
+    )
+    return res
+  }
+
+  suspend fun getCredentialHistory(accountId: String): List<CredentialHistoryItem> {
+    val res = supabase.fetchCredentialHistory(accountId)
+    return res.getOrNull().orEmpty()
+  }
+
+  suspend fun getAccountRentals(accountId: String): List<ActiveRental> {
+    val res = supabase.fetchAccountRentals(accountId)
+    return res.getOrNull().orEmpty()
   }
 
   suspend fun confirmPixRentalWithSupabase(
@@ -287,6 +387,9 @@ class AccountRepository(private val context: Context) {
   ): ActiveRental {
     val currentUserId = sessionManager.currentSession.value?.userId ?: "guest_user"
     val token = sessionManager.currentSession.value?.accessToken
+
+    // Snapshot of current credentials at rental time!
+    val currentCredentials = account.credentials
 
     val rental = ActiveRental(
       id = "rent_" + UUID.randomUUID().toString().take(8),
@@ -300,7 +403,7 @@ class AccountRepository(private val context: Context) {
       totalPaid = totalPaid,
       startTimeMillis = System.currentTimeMillis(),
       durationDays = days,
-      credentials = account.credentials,
+      credentials = currentCredentials,
       status = "ACTIVE"
     )
 
@@ -329,7 +432,7 @@ class AccountRepository(private val context: Context) {
 
     postNotification(
       title = "Pagamento PIX Aprovado!",
-      message = "Aluguel de ${account.title} ativo por $days dias. Suas credenciais foram liberadas!",
+      message = "Aluguel ativo por $days dias. Suas credenciais foram liberadas!",
       type = NotificationType.SUCCESS
     )
 
@@ -337,18 +440,24 @@ class AccountRepository(private val context: Context) {
   }
 
   fun renewRental(rentalId: String, extraDays: Int) {
+    val rental = _activeRentals.value.find { it.id == rentalId }
+    val account = rental?.let { r -> _accounts.value.find { it.id == r.accountId } }
+    // If creator updated credentials, renewal can optionally upgrade credentials or maintain active access
+    val updatedCredentials = account?.credentials
+
     _activeRentals.value = _activeRentals.value.map { r ->
       if (r.id == rentalId) {
         r.copy(
           days = r.days + extraDays,
           durationDays = r.durationDays + extraDays,
-          status = "ACTIVE"
+          status = "ACTIVE",
+          credentials = updatedCredentials ?: r.credentials
         )
       } else r
     }
 
     scope.launch(Dispatchers.IO) {
-      supabase.updateRentalDuration(rentalId, extraDays)
+      supabase.updateRentalDuration(rentalId, extraDays, updatedCredentials)
     }
 
     postNotification(
@@ -456,8 +565,9 @@ class AccountRepository(private val context: Context) {
           pin = "7821",
           server = "América do Sul (Latência 12ms)",
           profileAssigned = "Perfil #2 (Privado & Seguro)",
-          rules = "Uso exclusivo do perfil designado. Proibido alterar credenciais mestras."
-        )
+          rules = "Compartilhar a senha com terceiros resulta em banimento permanente."
+        ),
+        isActive = true
       ),
       SharedAccount(
         id = "acc_gamer",
@@ -487,8 +597,9 @@ class AccountRepository(private val context: Context) {
           pin = "1337",
           server = "Global Fast CDN",
           profileAssigned = "Perfil #3 (Gamer Stream)",
-          rules = "Não alterar dados de segurança. Conexões simultâneas monitoradas."
-        )
+          rules = "Compartilhar a senha com terceiros resulta em banimento permanente."
+        ),
+        isActive = true
       ),
       SharedAccount(
         id = "acc_cyber",
@@ -518,9 +629,10 @@ class AccountRepository(private val context: Context) {
           pin = "9090",
           server = "Ultra Secure BR-01",
           profileAssigned = "Perfil #1 (Titan Unit)",
-          rules = "Respeitar tempo de aluguel. Suporte automático em caso de instabilidade."
+          rules = "Compartilhar a senha com terceiros resulta em banimento permanente."
         ),
-        isOccupied = true
+        isOccupied = true,
+        isActive = true
       )
     )
 

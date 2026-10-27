@@ -228,6 +228,31 @@ fun CredentialsDeliveryDialog(
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        // Prominent Ban Warning Banner
+        Surface(
+          color = Color(0xFFFEF2F2),
+          shape = RoundedCornerShape(12.dp),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(imageVector = Icons.Default.Security, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "Aviso Importante: Compartilhar a senha com terceiros resulta em banimento permanente e cancelamento imediato do acesso.",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = Color(0xFFDC2626),
+              lineHeight = 16.sp
+            )
+          }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         // Rental duration info
         Surface(
           color = Color(0xFFEFF6FF),
@@ -238,10 +263,10 @@ fun CredentialsDeliveryDialog(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Icon(imageVector = Icons.Default.Security, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(20.dp))
+            Icon(imageVector = Icons.Default.Key, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "Período contratado: ${rental.days} dias para ${rental.peopleCount} pessoas. O contador está ativo em tempo real.",
+              text = "Período contratado: ${rental.days} dias para ${rental.peopleCount} pessoas. O cronômetro de acesso está ativo.",
               fontSize = 12.sp,
               color = BluePrimary,
               lineHeight = 16.sp

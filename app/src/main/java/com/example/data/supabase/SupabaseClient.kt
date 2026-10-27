@@ -5,6 +5,7 @@ import com.example.BuildConfig
 import com.example.R
 import com.example.data.model.AccountCredentials
 import com.example.data.model.ActiveRental
+import com.example.data.model.CredentialHistoryItem
 import com.example.data.model.IncludedItem
 import com.example.data.model.SharedAccount
 import com.example.data.model.UserSession
@@ -16,6 +17,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 class SupabaseClient {
@@ -68,8 +70,6 @@ class SupabaseClient {
       val accessToken = json.optString("access_token")
       val refreshToken = json.optString("refresh_token")
 
-      // If access_token was not returned directly (due to email confirmation setting),
-      // we attempt immediate sign in because we enabled the auto_confirm trigger.
       if (accessToken.isBlank()) {
         return@withContext signIn(email, pass)
       }
@@ -172,10 +172,9 @@ class SupabaseClient {
           pin = obj.optString("credentials_pin", "4892"),
           server = obj.optString("credentials_server", "América do Sul (BR-01)"),
           profileAssigned = obj.optString("credentials_profile_assigned", "Perfil #1 (VIP)"),
-          rules = obj.optString("credentials_rules", "Não trocar senha nem transferir perfil.")
+          rules = obj.optString("credentials_rules", "Compartilhar a senha com terceiros resulta em banimento permanente.")
         )
 
-        // Fetch included items for this account
         val items = fetchIncludedItemsSync(accId)
 
         list.add(
@@ -199,7 +198,9 @@ class SupabaseClient {
             itemsIncluded = items,
             credentials = creds,
             isOccupied = obj.optBoolean("is_occupied", false),
-            createdBy = if (obj.isNull("created_by")) null else obj.optString("created_by")
+            createdBy = if (obj.isNull("created_by")) null else obj.optString("created_by"),
+            isActive = obj.optBoolean("is_active", true),
+            customDiscountPercent = obj.optInt("custom_discount_percent", 0)
           )
         )
       }
@@ -272,6 +273,7 @@ class SupabaseClient {
           put("model_3d_url", account.model3dUrl)
           put("is_occupied", account.isOccupied)
           put("created_by", account.createdBy)
+          put("is_active", account.isActive)
           put("credentials_username", account.credentials.username)
           put("credentials_password", account.credentials.password)
           put("credentials_pin", account.credentials.pin)
@@ -296,10 +298,12 @@ class SupabaseClient {
           return@withContext Result.failure(Exception("Failed to insert account: $errorText"))
         }
 
-        // Insert items for this account
         if (account.itemsIncluded.isNotEmpty()) {
           insertIncludedItems(account.id, account.itemsIncluded, authToken)
         }
+
+        // Record initial credentials in history
+        insertCredentialHistory(account.id, account.credentials.username, account.credentials.password, account.createdBy)
 
         Result.success(true)
       } catch (e: Exception) {
@@ -307,6 +311,210 @@ class SupabaseClient {
         Result.failure(e)
       }
     }
+
+  suspend fun updateAccountCredentials(
+    accountId: String,
+    newUsername: String,
+    newPass: String,
+    userId: String?
+  ): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      val url = "$baseUrl/rest/v1/accounts?id=eq.$accountId"
+      val body = JSONObject().apply {
+        put("credentials_username", newUsername)
+        put("credentials_password", newPass)
+      }
+
+      val request = Request.Builder()
+        .url(url)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", "Bearer $anonKey")
+        .addHeader("Content-Type", "application/json")
+        .patch(body.toString().toRequestBody(jsonMedia))
+        .build()
+
+      val resp = client.newCall(request).execute()
+      if (resp.isSuccessful) {
+        insertCredentialHistory(accountId, newUsername, newPass, userId)
+      }
+      Result.success(resp.isSuccessful)
+    } catch (e: Exception) {
+      Log.e(tag, "updateAccountCredentials failed", e)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun toggleAccountActive(accountId: String, isActive: Boolean): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      val url = "$baseUrl/rest/v1/accounts?id=eq.$accountId"
+      val body = JSONObject().apply {
+        put("is_active", isActive)
+      }
+      val request = Request.Builder()
+        .url(url)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", "Bearer $anonKey")
+        .addHeader("Content-Type", "application/json")
+        .patch(body.toString().toRequestBody(jsonMedia))
+        .build()
+
+      val resp = client.newCall(request).execute()
+      Result.success(resp.isSuccessful)
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+  }
+
+  suspend fun deleteAccount(accountId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      val url = "$baseUrl/rest/v1/accounts?id=eq.$accountId"
+      val request = Request.Builder()
+        .url(url)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", "Bearer $anonKey")
+        .delete()
+        .build()
+
+      val resp = client.newCall(request).execute()
+      Result.success(resp.isSuccessful)
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+  }
+
+  suspend fun updateAccountPricing(
+    accountId: String,
+    basePrice: Double,
+    customDiscount: Int
+  ): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      val url = "$baseUrl/rest/v1/accounts?id=eq.$accountId"
+      val body = JSONObject().apply {
+        put("base_price_per_day", basePrice)
+        put("custom_discount_percent", customDiscount)
+      }
+
+      val request = Request.Builder()
+        .url(url)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", "Bearer $anonKey")
+        .addHeader("Content-Type", "application/json")
+        .patch(body.toString().toRequestBody(jsonMedia))
+        .build()
+
+      val resp = client.newCall(request).execute()
+      Result.success(resp.isSuccessful)
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+  }
+
+  private suspend fun insertCredentialHistory(
+    accountId: String,
+    username: String,
+    pass: String,
+    userId: String?
+  ) = withContext(Dispatchers.IO) {
+    try {
+      val url = "$baseUrl/rest/v1/credential_history"
+      val body = JSONObject().apply {
+        put("id", "hist_" + UUID.randomUUID().toString().take(8))
+        put("account_id", accountId)
+        put("username", username)
+        put("password", pass)
+        put("changed_by", userId)
+      }
+
+      val req = Request.Builder()
+        .url(url)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", "Bearer $anonKey")
+        .addHeader("Content-Type", "application/json")
+        .post(body.toString().toRequestBody(jsonMedia))
+        .build()
+
+      client.newCall(req).execute()
+    } catch (e: Exception) {
+      Log.w(tag, "Failed to insert credential history", e)
+    }
+  }
+
+  suspend fun fetchCredentialHistory(accountId: String): Result<List<CredentialHistoryItem>> = withContext(Dispatchers.IO) {
+    try {
+      val url = "$baseUrl/rest/v1/credential_history?account_id=eq.$accountId&order=changed_at.desc"
+      val req = Request.Builder()
+        .url(url)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", "Bearer $anonKey")
+        .get()
+        .build()
+
+      val resp = client.newCall(req).execute()
+      val body = resp.body?.string() ?: "[]"
+      if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+
+      val arr = JSONArray(body)
+      val list = mutableListOf<CredentialHistoryItem>()
+      for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        list.add(
+          CredentialHistoryItem(
+            id = o.getString("id"),
+            accountId = o.getString("account_id"),
+            username = o.getString("username"),
+            password = o.getString("password"),
+            changedAt = o.optString("changed_at", "")
+          )
+        )
+      }
+      Result.success(list)
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+  }
+
+  suspend fun fetchAccountRentals(accountId: String): Result<List<ActiveRental>> = withContext(Dispatchers.IO) {
+    try {
+      val url = "$baseUrl/rest/v1/rentals?account_id=eq.$accountId&order=created_at.desc"
+      val req = Request.Builder()
+        .url(url)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", "Bearer $anonKey")
+        .get()
+        .build()
+
+      val resp = client.newCall(req).execute()
+      val body = resp.body?.string() ?: "[]"
+      if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+
+      val arr = JSONArray(body)
+      val list = mutableListOf<ActiveRental>()
+      for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        list.add(
+          ActiveRental(
+            id = o.getString("id"),
+            accountId = o.getString("account_id"),
+            userId = o.optString("user_id", ""),
+            accountTitle = o.optString("account_title", ""),
+            days = o.getInt("days"),
+            peopleCount = o.optInt("people_count", 1),
+            totalPaid = o.optDouble("total_paid", 0.0),
+            startTimeMillis = o.getLong("start_time"),
+            durationDays = o.getInt("duration_days"),
+            credentials = AccountCredentials(
+              username = o.optString("credentials_username", ""),
+              password = o.optString("credentials_password", "")
+            ),
+            status = o.optString("status", "ACTIVE")
+          )
+        )
+      }
+      Result.success(list)
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+  }
 
   suspend fun insertIncludedItems(accountId: String, items: List<IncludedItem>, authToken: String? = null): Result<Boolean> =
     withContext(Dispatchers.IO) {
@@ -453,7 +661,7 @@ class SupabaseClient {
           pin = o.optString("credentials_pin", "1234"),
           server = o.optString("credentials_server", "BR-SUL"),
           profileAssigned = o.optString("credentials_profile_assigned", "Perfil #1"),
-          rules = o.optString("credentials_rules", "Regras padrão.")
+          rules = o.optString("credentials_rules", "Compartilhar a senha com terceiros resulta em banimento permanente.")
         )
 
         list.add(
@@ -545,9 +753,12 @@ class SupabaseClient {
     }
   }
 
-  suspend fun updateRentalDuration(rentalId: String, extraDays: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+  suspend fun updateRentalDuration(
+    rentalId: String,
+    extraDays: Int,
+    updatedCredentials: AccountCredentials? = null
+  ): Result<Boolean> = withContext(Dispatchers.IO) {
     try {
-      // First fetch current rental to compute new duration
       val getUrl = "$baseUrl/rest/v1/rentals?id=eq.$rentalId"
       val getReq = Request.Builder().url(getUrl).addHeader("apikey", anonKey).get().build()
       val getResp = client.newCall(getReq).execute()
@@ -563,6 +774,11 @@ class SupabaseClient {
         put("days", newDays)
         put("duration_days", newDuration)
         put("status", "ACTIVE")
+        if (updatedCredentials != null) {
+          put("credentials_username", updatedCredentials.username)
+          put("credentials_password", updatedCredentials.password)
+          put("credentials_pin", updatedCredentials.pin)
+        }
       }
 
       val patchReq = Request.Builder()

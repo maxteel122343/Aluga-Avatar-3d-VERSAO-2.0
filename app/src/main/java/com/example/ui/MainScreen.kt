@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ViewInAr
@@ -394,7 +394,7 @@ fun TopUserHeader(
             onClick = onLogoutClick,
             modifier = Modifier.size(28.dp)
           ) {
-            Icon(Icons.Default.Logout, contentDescription = "Sair", tint = Gray500, modifier = Modifier.size(16.dp))
+            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sair", tint = Gray500, modifier = Modifier.size(16.dp))
           }
         }
       } else {

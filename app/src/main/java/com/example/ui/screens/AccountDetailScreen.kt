@@ -144,6 +144,8 @@ fun AccountDetailScreen(
         avatarUrl = account.avatarUrl,
         model3dUrl = account.model3dUrl,
         selectedItem = selectedItem,
+        isOccupied = account.isOccupied,
+        currentUsers = account.currentUsers,
         onRentClick = { handleRentClick() }
       )
 
