@@ -1,7 +1,9 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Remove
@@ -35,6 +40,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.BluePrimary
+import com.example.ui.theme.Gray100
 import com.example.ui.theme.Gray200
 import com.example.ui.theme.Gray400
 import com.example.ui.theme.Gray500
@@ -49,6 +56,8 @@ import com.example.ui.theme.White
 fun PriceCalculatorCard(
   days: Int,
   people: Int,
+  currentUsers: Int = 2,
+  maxUsers: Int = 5,
   formattedPrice: String,
   discountPercent: Int,
   onDaysChange: (Int) -> Unit,
@@ -69,9 +78,9 @@ fun PriceCalculatorCard(
       modifier = Modifier.padding(bottom = 12.dp)
     )
 
-    // Dual Counter Container (Dias & Pessoas)
+    // Dual Counter Container (Dias & Pessoas alugando)
     Surface(
-      shape = RoundedCornerShape(12.dp),
+      shape = RoundedCornerShape(14.dp),
       color = White,
       border = androidx.compose.foundation.BorderStroke(1.dp, Gray200),
       modifier = Modifier.fillMaxWidth()
@@ -80,7 +89,7 @@ fun PriceCalculatorCard(
         modifier = Modifier
           .fillMaxWidth()
           .height(IntrinsicSize.Min)
-          .padding(vertical = 8.dp, horizontal = 12.dp),
+          .padding(vertical = 10.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
         // Section: Dias
@@ -97,12 +106,19 @@ fun PriceCalculatorCard(
               modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(
-              text = "Dias",
-              fontSize = 14.sp,
-              fontWeight = FontWeight.Medium,
-              color = Gray700
-            )
+            Column {
+              Text(
+                text = "Dias",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Gray700
+              )
+              Text(
+                text = "$days ${if (days > 1) "dias" else "dia"}",
+                fontSize = 11.sp,
+                color = Gray500
+              )
+            }
           }
 
           Row(
@@ -168,39 +184,52 @@ fun PriceCalculatorCard(
         // Vertical divider between Dias and Pessoas
         Box(
           modifier = Modifier
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 10.dp)
             .width(1.dp)
-            .fillMaxHeight(0.7f)
+            .fillMaxHeight(0.75f)
             .background(Gray200)
         )
 
-        // Section: Pessoas
+        // Section: "2/5 pessoas alugando" (Clara percepção de ocupação compartilhada)
         Row(
-          modifier = Modifier.weight(1f),
+          modifier = Modifier
+            .weight(1.25f)
+            .testTag("people_occupancy_section"),
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+          ) {
             Icon(
               imageVector = Icons.Default.People,
-              contentDescription = "Pessoas",
-              tint = Gray700,
+              contentDescription = "Pessoas alugando",
+              tint = BluePrimary,
               modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(
-              text = "Pessoas",
-              fontSize = 14.sp,
-              fontWeight = FontWeight.Medium,
-              color = Gray700
-            )
+            Column {
+              Text(
+                text = "${currentUsers}/${maxUsers} pessoas",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Gray900
+              )
+              Text(
+                text = "alugando agora",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = BluePrimary
+              )
+            }
           }
 
+          // Stepper for slots / people count with progressive discount
           Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
           ) {
-            // Minus Button
             Box(
               modifier = Modifier
                 .size(28.dp)
@@ -216,7 +245,7 @@ fun PriceCalculatorCard(
               ) {
                 Icon(
                   imageVector = Icons.Default.Remove,
-                  contentDescription = "Diminuir pessoas",
+                  contentDescription = "Diminuir vagas",
                   tint = if (people > 1) Gray900 else Gray400,
                   modifier = Modifier.size(14.dp)
                 )
@@ -225,13 +254,12 @@ fun PriceCalculatorCard(
 
             Text(
               text = "$people",
-              fontSize = 17.sp,
+              fontSize = 16.sp,
               fontWeight = FontWeight.Bold,
               color = Gray900,
-              modifier = Modifier.padding(horizontal = 6.dp)
+              modifier = Modifier.padding(horizontal = 4.dp)
             )
 
-            // Plus Button
             Box(
               modifier = Modifier
                 .size(28.dp)
@@ -240,15 +268,15 @@ fun PriceCalculatorCard(
               contentAlignment = Alignment.Center
             ) {
               IconButton(
-                onClick = { if (people < 10) onPeopleChange(people + 1) },
+                onClick = { if (people < maxUsers) onPeopleChange(people + 1) },
                 modifier = Modifier
                   .size(28.dp)
                   .testTag("increase_people_button")
               ) {
                 Icon(
                   imageVector = Icons.Default.Add,
-                  contentDescription = "Aumentar pessoas",
-                  tint = Gray900,
+                  contentDescription = "Aumentar vagas",
+                  tint = if (people < maxUsers) Gray900 else Gray400,
                   modifier = Modifier.size(14.dp)
                 )
               }
@@ -258,9 +286,39 @@ fun PriceCalculatorCard(
       }
     }
 
-    Spacer(modifier = Modifier.height(18.dp))
+    Spacer(modifier = Modifier.height(10.dp))
 
-    // Preço ao vivo & Tag de Desconto aplicado
+    // Percepção de Preço Compartilhado: "Quanto mais pessoas alugando, maior o desconto"
+    Surface(
+      color = Color(0xFFF0FDF4),
+      shape = RoundedCornerShape(10.dp),
+      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDCFCE7)),
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Row(
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Icon(
+          imageVector = Icons.AutoMirrored.Filled.TrendingDown,
+          contentDescription = null,
+          tint = Color(0xFF16A34A),
+          modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = "Preço compartilhado: quanto mais pessoas no grupo, maior o desconto (-$discountPercent% aplicado)",
+          fontSize = 11.sp,
+          fontWeight = FontWeight.SemiBold,
+          color = Color(0xFF15803D),
+          lineHeight = 14.sp
+        )
+      }
+    }
+
+    Spacer(modifier = Modifier.height(14.dp))
+
+    // Preço ao vivo & Tag de Desconto aplicado (EXACTLY AS IN SCREENSHOT)
     Row(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.SpaceBetween,
@@ -281,7 +339,7 @@ fun PriceCalculatorCard(
         )
       }
 
-      // Green Discount Pill Badge (EXACTLY AS IN SCREENSHOT)
+      // Green Discount Pill Badge
       Surface(
         color = GreenTagBg,
         shape = RoundedCornerShape(12.dp),

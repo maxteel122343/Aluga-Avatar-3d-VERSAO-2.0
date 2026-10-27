@@ -241,7 +241,8 @@ class SupabaseClient {
             iconRes = iconRes,
             iconUrl = o.optString("icon_url", ""),
             description = o.optString("description", ""),
-            poseName = o.optString("pose_name", "")
+            poseName = o.optString("pose_name", ""),
+            mediaUrl = o.optString("media_url", "")
           )
         )
       }
@@ -530,6 +531,7 @@ class SupabaseClient {
             put("icon_res_name", resolveItemDrawableName(item.iconRes))
             put("description", item.description)
             put("pose_name", item.poseName)
+            put("media_url", item.mediaUrl)
           }
           arr.put(obj)
         }
@@ -550,6 +552,36 @@ class SupabaseClient {
         Result.failure(e)
       }
     }
+
+  suspend fun replaceIncludedItems(
+    accountId: String,
+    items: List<IncludedItem>,
+    authToken: String? = null
+  ): Result<Boolean> = withContext(Dispatchers.IO) {
+    try {
+      // 1. Delete existing items for account
+      val delUrl = "$baseUrl/rest/v1/included_items?account_id=eq.$accountId"
+      val authHeader = if (!authToken.isNullOrBlank()) "Bearer $authToken" else "Bearer $anonKey"
+      val delReq = Request.Builder()
+        .url(delUrl)
+        .addHeader("apikey", anonKey)
+        .addHeader("Authorization", authHeader)
+        .delete()
+        .build()
+
+      client.newCall(delReq).execute()
+
+      // 2. Insert new items
+      if (items.isNotEmpty()) {
+        insertIncludedItems(accountId, items, authToken)
+      } else {
+        Result.success(true)
+      }
+    } catch (e: Exception) {
+      Log.e(tag, "replaceIncludedItems failed", e)
+      Result.failure(e)
+    }
+  }
 
   suspend fun updateAccountUsage(
     accountId: String,
@@ -874,10 +906,10 @@ class SupabaseClient {
 
   private fun defaultItems(): List<IncludedItem> {
     return listOf(
-      IncludedItem("item_hat", "Chapéu", R.drawable.item_hat, "", "Chapéu de safari explorador", "Pose Aventura"),
-      IncludedItem("item_backpack", "Mochila", R.drawable.item_backpack, "", "Mochila táctica azul", "Pose Viagem"),
-      IncludedItem("item_boots", "Botas", R.drawable.item_boots, "", "Botas todo-terreno de couro", "Pose Caminhada"),
-      IncludedItem("item_map", "Mapa", R.drawable.item_map, "", "Mapa de navegação detalhado", "Pose Exploração")
+      IncludedItem("item_hat", "Chapéu", R.drawable.item_hat, "", "Chapéu de safari explorador", "Pose Aventura", "https://media.giphy.com/media/3o7TKTDnUxE0g2fSE8/giphy.gif"),
+      IncludedItem("item_backpack", "Mochila", R.drawable.item_backpack, "", "Mochila táctica azul", "Pose Viagem", "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif"),
+      IncludedItem("item_boots", "Botas", R.drawable.item_boots, "", "Botas todo-terreno de couro", "Pose Caminhada", "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif"),
+      IncludedItem("item_map", "Mapa", R.drawable.item_map, "", "Mapa de navegação detalhado", "Pose Exploração", "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif")
     )
   }
 }

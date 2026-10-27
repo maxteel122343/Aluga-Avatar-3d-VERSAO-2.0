@@ -146,7 +146,8 @@ fun AccountDetailScreen(
         selectedItem = selectedItem,
         isOccupied = account.isOccupied,
         currentUsers = account.currentUsers,
-        onRentClick = { handleRentClick() }
+        onRentClick = { handleRentClick() },
+        onClearSelectedItem = { selectedItem = null }
       )
 
       Spacer(modifier = Modifier.height(10.dp))
@@ -155,6 +156,8 @@ fun AccountDetailScreen(
       PriceCalculatorCard(
         days = days,
         people = people,
+        currentUsers = account.currentUsers,
+        maxUsers = account.maxUsers,
         formattedPrice = calculation.formattedPrice,
         discountPercent = calculation.discountPercent,
         onDaysChange = { days = it },

@@ -95,6 +95,7 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.ActiveRental
 import com.example.data.model.CredentialHistoryItem
+import com.example.data.model.IncludedItem
 import com.example.data.model.SharedAccount
 import com.example.data.repository.AccountRepository
 import com.example.ui.theme.BluePrimary
@@ -130,6 +131,7 @@ fun CreatorPanelScreen(
   // Modals for managing card
   var editingCardCredentials by remember { mutableStateOf<SharedAccount?>(null) }
   var editingCardPricing by remember { mutableStateOf<SharedAccount?>(null) }
+  var editingCardItems by remember { mutableStateOf<SharedAccount?>(null) }
   var historyCard by remember { mutableStateOf<SharedAccount?>(null) }
   var deletingCard by remember { mutableStateOf<SharedAccount?>(null) }
   var viewingRentalsCard by remember { mutableStateOf<SharedAccount?>(null) }
@@ -269,6 +271,7 @@ fun CreatorPanelScreen(
           repository = repository,
           onEditCredentials = { editingCardCredentials = it },
           onEditPricing = { editingCardPricing = it },
+          onEditItems = { editingCardItems = it },
           onViewHistory = { historyCard = it },
           onDeleteCard = { deletingCard = it },
           onViewRentals = { viewingRentalsCard = it }
@@ -292,6 +295,15 @@ fun CreatorPanelScreen(
       card = card,
       repository = repository,
       onDismiss = { editingCardPricing = null }
+    )
+  }
+
+  // Dialog: Edit Included Items & Pose GIFs
+  editingCardItems?.let { card ->
+    EditAccountItemsDialog(
+      card = card,
+      repository = repository,
+      onDismiss = { editingCardItems = null }
     )
   }
 
@@ -341,6 +353,14 @@ fun CreatorPanelScreen(
   }
 }
 
+data class CreatorItemDraft(
+  val id: String = UUID.randomUUID().toString(),
+  val name: String = "",
+  val poseName: String = "",
+  val mediaUrl: String = "",
+  val iconRes: Int = R.drawable.item_hat
+)
+
 @Composable
 fun CreateNewCardTab(
   repository: AccountRepository,
@@ -367,6 +387,66 @@ fun CreateNewCardTab(
   var isUploadingAvatar by remember { mutableStateOf(false) }
   var isUploadingModel by remember { mutableStateOf(false) }
   var isPublishing by remember { mutableStateOf(false) }
+
+  var draftItems by remember {
+    mutableStateOf(
+      listOf(
+        CreatorItemDraft(
+          id = "draft_1",
+          name = "Chapéu Safari",
+          poseName = "Pose Aventura",
+          mediaUrl = "https://media.giphy.com/media/3o7TKTDnUxE0g2fSE8/giphy.gif",
+          iconRes = R.drawable.item_hat
+        ),
+        CreatorItemDraft(
+          id = "draft_2",
+          name = "Mochila Tática",
+          poseName = "Pose Viagem",
+          mediaUrl = "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif",
+          iconRes = R.drawable.item_backpack
+        ),
+        CreatorItemDraft(
+          id = "draft_3",
+          name = "Botas de Couro",
+          poseName = "Pose Caminhada",
+          mediaUrl = "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif",
+          iconRes = R.drawable.item_boots
+        )
+      )
+    )
+  }
+
+  var uploadingItemIdx by remember { mutableIntStateOf(-1) }
+
+  val itemPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.GetContent()
+  ) { uri ->
+    if (uri != null && uploadingItemIdx in draftItems.indices) {
+      val targetIdx = uploadingItemIdx
+      scope.launch {
+        try {
+          val bytes = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+          }
+          if (bytes != null) {
+            val fileName = "item_pose_${UUID.randomUUID().toString().take(8)}.gif"
+            val uploadRes = repository.supabase.uploadFile("assets", fileName, bytes, "image/gif")
+            if (uploadRes.isSuccess) {
+              val url = uploadRes.getOrThrow()
+              draftItems = draftItems.mapIndexed { idx, itm ->
+                if (idx == targetIdx) itm.copy(mediaUrl = url) else itm
+              }
+              Toast.makeText(context, "Mídia da pose salva no Storage!", Toast.LENGTH_SHORT).show()
+            }
+          }
+        } catch (e: Exception) {
+          Toast.makeText(context, "Falha no upload do arquivo", Toast.LENGTH_SHORT).show()
+        } finally {
+          uploadingItemIdx = -1
+        }
+      }
+    }
+  }
 
   val imagePickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
@@ -726,6 +806,183 @@ fun CreateNewCardTab(
       shape = RoundedCornerShape(12.dp)
     )
 
+    Spacer(modifier = Modifier.height(20.dp))
+
+    // Section 4: Itens Incluídos & GIFs de Pose
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = "4. Itens Incluídos & Preview de Pose (GIF)",
+          fontSize = 15.sp,
+          fontWeight = FontWeight.Bold,
+          color = Gray900
+        )
+        Text(
+          text = "Ao tocar no item no pedestal, a animação da pose substitui o avatar 3D.",
+          fontSize = 11.sp,
+          color = Gray500
+        )
+      }
+
+      OutlinedButton(
+        onClick = {
+          draftItems = draftItems + CreatorItemDraft(
+            name = "Novo Item #${draftItems.size + 1}",
+            poseName = "Pose Especial",
+            mediaUrl = "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif",
+            iconRes = R.drawable.item_map
+          )
+        },
+        shape = RoundedCornerShape(8.dp)
+      ) {
+        Icon(Icons.Default.Add, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text("Adicionar", fontSize = 11.sp, color = BluePrimary)
+      }
+    }
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    draftItems.forEachIndexed { index, draft ->
+      Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Gray50),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Gray200),
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(bottom = 10.dp)
+      ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(
+              text = "Item #${index + 1}",
+              fontWeight = FontWeight.Bold,
+              fontSize = 12.sp,
+              color = BluePrimary
+            )
+            if (draftItems.size > 1) {
+              IconButton(
+                onClick = {
+                  draftItems = draftItems.filterIndexed { i, _ -> i != index }
+                },
+                modifier = Modifier.size(28.dp)
+              ) {
+                Icon(Icons.Default.Delete, contentDescription = "Remover", tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            OutlinedTextField(
+              value = draft.name,
+              onValueChange = { newName ->
+                draftItems = draftItems.mapIndexed { i, itm -> if (i == index) itm.copy(name = newName) else itm }
+              },
+              label = { Text("Nome do Item *") },
+              modifier = Modifier.weight(1f),
+              shape = RoundedCornerShape(10.dp),
+              singleLine = true
+            )
+
+            OutlinedTextField(
+              value = draft.poseName,
+              onValueChange = { newPose ->
+                draftItems = draftItems.mapIndexed { i, itm -> if (i == index) itm.copy(poseName = newPose) else itm }
+              },
+              label = { Text("Nome da Pose") },
+              modifier = Modifier.weight(1f),
+              shape = RoundedCornerShape(10.dp),
+              singleLine = true
+            )
+          }
+
+          Spacer(modifier = Modifier.height(8.dp))
+
+          OutlinedTextField(
+            value = draft.mediaUrl,
+            onValueChange = { newUrl ->
+              draftItems = draftItems.mapIndexed { i, itm -> if (i == index) itm.copy(mediaUrl = newUrl) else itm }
+            },
+            label = { Text("URL do GIF / Vídeo de Pose *") },
+            placeholder = { Text("https://.../pose.gif") },
+            trailingIcon = {
+              IconButton(
+                onClick = {
+                  uploadingItemIdx = index
+                  itemPickerLauncher.launch("image/*")
+                }
+              ) {
+                Icon(Icons.Default.CloudUpload, contentDescription = "Upload Mídia", tint = BluePrimary)
+              }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            singleLine = true
+          )
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          // Quick Presets
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+          ) {
+            Surface(
+              color = Color(0xFFEFF6FF),
+              shape = RoundedCornerShape(8.dp),
+              border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE)),
+              modifier = Modifier.clickable {
+                draftItems = draftItems.mapIndexed { i, itm ->
+                  if (i == index) itm.copy(mediaUrl = "https://media.giphy.com/media/3o7TKTDnUxE0g2fSE8/giphy.gif", poseName = "Pose Aventura") else itm
+                }
+              }
+            ) {
+              Text("Aventura GIF", fontSize = 10.sp, color = BluePrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+            }
+
+            Surface(
+              color = Color(0xFFEFF6FF),
+              shape = RoundedCornerShape(8.dp),
+              border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE)),
+              modifier = Modifier.clickable {
+                draftItems = draftItems.mapIndexed { i, itm ->
+                  if (i == index) itm.copy(mediaUrl = "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif", poseName = "Pose Viagem") else itm
+                }
+              }
+            ) {
+              Text("Viagem GIF", fontSize = 10.sp, color = BluePrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+            }
+
+            Surface(
+              color = Color(0xFFEFF6FF),
+              shape = RoundedCornerShape(8.dp),
+              border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE)),
+              modifier = Modifier.clickable {
+                draftItems = draftItems.mapIndexed { i, itm ->
+                  if (i == index) itm.copy(mediaUrl = "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif", poseName = "Pose Caminhada") else itm
+                }
+              }
+            ) {
+              Text("Caminhada GIF", fontSize = 10.sp, color = BluePrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+            }
+          }
+        }
+      }
+    }
+
     Spacer(modifier = Modifier.height(24.dp))
 
     // Submit Button
@@ -741,6 +998,18 @@ fun CreateNewCardTab(
         }
 
         val price = basePriceText.toDoubleOrNull() ?: 29.90
+        val finalIncludedItems = draftItems.filter { it.name.isNotBlank() }.mapIndexed { idx, it ->
+          IncludedItem(
+            id = "item_${UUID.randomUUID().toString().take(6)}",
+            name = it.name,
+            iconRes = it.iconRes,
+            iconUrl = "",
+            description = "Item exclusivo com animação de pose interativa",
+            poseName = it.poseName.ifBlank { "Pose Especial" },
+            mediaUrl = it.mediaUrl
+          )
+        }
+
         isPublishing = true
         scope.launch {
           val result = repository.createAccountWithSupabase(
@@ -753,7 +1022,8 @@ fun CreateNewCardTab(
             avatarUrl = customAvatarUrl,
             model3dUrl = model3dUrl,
             username = username,
-            pass = password
+            pass = password,
+            customItems = finalIncludedItems
           )
           isPublishing = false
           if (result.isSuccess) {
@@ -789,6 +1059,7 @@ fun ManageCardsTab(
   repository: AccountRepository,
   onEditCredentials: (SharedAccount) -> Unit,
   onEditPricing: (SharedAccount) -> Unit,
+  onEditItems: (SharedAccount) -> Unit,
   onViewHistory: (SharedAccount) -> Unit,
   onDeleteCard: (SharedAccount) -> Unit,
   onViewRentals: (SharedAccount) -> Unit
@@ -954,6 +1225,18 @@ fun ManageCardsTab(
               Spacer(modifier = Modifier.width(4.dp))
               Text("Preço/Regras", fontSize = 12.sp)
             }
+          }
+
+          Spacer(modifier = Modifier.height(8.dp))
+
+          OutlinedButton(
+            onClick = { onEditItems(card) },
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Editar Itens & Poses (${card.itemsIncluded.size})", fontSize = 12.sp, color = BluePrimary, fontWeight = FontWeight.SemiBold)
           }
 
           Spacer(modifier = Modifier.height(8.dp))
@@ -1300,3 +1583,268 @@ fun AccountRentalsDialog(
     }
   )
 }
+
+@Composable
+fun EditAccountItemsDialog(
+  card: SharedAccount,
+  repository: AccountRepository,
+  onDismiss: () -> Unit
+) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+
+  var draftItems by remember {
+    mutableStateOf(
+      if (card.itemsIncluded.isNotEmpty()) {
+        card.itemsIncluded.map {
+          CreatorItemDraft(
+            id = it.id,
+            name = it.name,
+            poseName = it.poseName,
+            mediaUrl = it.mediaUrl,
+            iconRes = it.iconRes
+          )
+        }
+      } else {
+        listOf(
+          CreatorItemDraft("item_1", "Chapéu", "Pose Aventura", "https://media.giphy.com/media/3o7TKTDnUxE0g2fSE8/giphy.gif", R.drawable.item_hat),
+          CreatorItemDraft("item_2", "Mochila", "Pose Viagem", "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif", R.drawable.item_backpack)
+        )
+      }
+    )
+  }
+
+  var isSaving by remember { mutableStateOf(false) }
+  var uploadingIdx by remember { mutableIntStateOf(-1) }
+
+  val mediaUploadLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.GetContent()
+  ) { uri ->
+    if (uri != null && uploadingIdx in draftItems.indices) {
+      val targetIdx = uploadingIdx
+      scope.launch {
+        try {
+          val bytes = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+          }
+          if (bytes != null) {
+            val fileName = "pose_${UUID.randomUUID().toString().take(8)}.gif"
+            val res = repository.supabase.uploadFile("assets", fileName, bytes, "image/gif")
+            if (res.isSuccess) {
+              val url = res.getOrThrow()
+              draftItems = draftItems.mapIndexed { i, itm ->
+                if (i == targetIdx) itm.copy(mediaUrl = url) else itm
+              }
+              Toast.makeText(context, "Mídia de pose salva no Storage!", Toast.LENGTH_SHORT).show()
+            }
+          }
+        } catch (e: Exception) {
+          Toast.makeText(context, "Erro no upload", Toast.LENGTH_SHORT).show()
+        } finally {
+          uploadingIdx = -1
+        }
+      }
+    }
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column(modifier = Modifier.weight(1f)) {
+          Text("Editar Itens & Poses", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+          Text(card.title, fontSize = 12.sp, color = Gray500)
+        }
+        OutlinedButton(
+          onClick = {
+            draftItems = draftItems + CreatorItemDraft(
+              name = "Novo Item #${draftItems.size + 1}",
+              poseName = "Pose Especial",
+              mediaUrl = "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif",
+              iconRes = R.drawable.item_map
+            )
+          },
+          shape = RoundedCornerShape(8.dp)
+        ) {
+          Icon(Icons.Default.Add, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(14.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("+ Item", fontSize = 11.sp, color = BluePrimary)
+        }
+      }
+    },
+    text = {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(380.dp)
+          .verticalScroll(rememberScrollState())
+      ) {
+        Text(
+          text = "Adicione ou edite os itens incluídos e as animações de pose (GIF/vídeo) que aparecem no pedestal.",
+          fontSize = 11.sp,
+          color = Gray500
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        draftItems.forEachIndexed { index, item ->
+          Card(
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = Gray50),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Gray200),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(bottom = 10.dp)
+          ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text("Item #${index + 1}", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BluePrimary)
+                if (draftItems.size > 1) {
+                  IconButton(
+                    onClick = { draftItems = draftItems.filterIndexed { i, _ -> i != index } },
+                    modifier = Modifier.size(24.dp)
+                  ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Remover", tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp))
+                  }
+                }
+              }
+
+              Spacer(modifier = Modifier.height(4.dp))
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+              ) {
+                OutlinedTextField(
+                  value = item.name,
+                  onValueChange = { newN -> draftItems = draftItems.mapIndexed { i, itm -> if (i == index) itm.copy(name = newN) else itm } },
+                  label = { Text("Nome", fontSize = 10.sp) },
+                  modifier = Modifier.weight(1f),
+                  shape = RoundedCornerShape(8.dp),
+                  singleLine = true
+                )
+
+                OutlinedTextField(
+                  value = item.poseName,
+                  onValueChange = { newP -> draftItems = draftItems.mapIndexed { i, itm -> if (i == index) itm.copy(poseName = newP) else itm } },
+                  label = { Text("Pose", fontSize = 10.sp) },
+                  modifier = Modifier.weight(1f),
+                  shape = RoundedCornerShape(8.dp),
+                  singleLine = true
+                )
+              }
+
+              Spacer(modifier = Modifier.height(6.dp))
+
+              OutlinedTextField(
+                value = item.mediaUrl,
+                onValueChange = { newU -> draftItems = draftItems.mapIndexed { i, itm -> if (i == index) itm.copy(mediaUrl = newU) else itm } },
+                label = { Text("URL do GIF/Vídeo", fontSize = 10.sp) },
+                trailingIcon = {
+                  IconButton(
+                    onClick = {
+                      uploadingIdx = index
+                      mediaUploadLauncher.launch("image/*")
+                    }
+                  ) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = "Upload Mídia", tint = BluePrimary)
+                  }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                singleLine = true
+              )
+
+              Spacer(modifier = Modifier.height(4.dp))
+
+              // Presets
+              Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Surface(
+                  color = Color(0xFFEFF6FF),
+                  shape = RoundedCornerShape(6.dp),
+                  modifier = Modifier.clickable {
+                    draftItems = draftItems.mapIndexed { i, itm ->
+                      if (i == index) itm.copy(mediaUrl = "https://media.giphy.com/media/3o7TKTDnUxE0g2fSE8/giphy.gif", poseName = "Pose Aventura") else itm
+                    }
+                  }
+                ) {
+                  Text("Aventura", fontSize = 9.sp, color = BluePrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                }
+
+                Surface(
+                  color = Color(0xFFEFF6FF),
+                  shape = RoundedCornerShape(6.dp),
+                  modifier = Modifier.clickable {
+                    draftItems = draftItems.mapIndexed { i, itm ->
+                      if (i == index) itm.copy(mediaUrl = "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif", poseName = "Pose Viagem") else itm
+                    }
+                  }
+                ) {
+                  Text("Viagem", fontSize = 9.sp, color = BluePrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                }
+
+                Surface(
+                  color = Color(0xFFEFF6FF),
+                  shape = RoundedCornerShape(6.dp),
+                  modifier = Modifier.clickable {
+                    draftItems = draftItems.mapIndexed { i, itm ->
+                      if (i == index) itm.copy(mediaUrl = "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif", poseName = "Pose Caminhada") else itm
+                    }
+                  }
+                ) {
+                  Text("Caminhada", fontSize = 9.sp, color = BluePrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          isSaving = true
+          val updatedItems = draftItems.filter { it.name.isNotBlank() }.mapIndexed { idx, it ->
+            IncludedItem(
+              id = if (it.id.isNotBlank()) it.id else "${card.id}_item_${idx + 1}",
+              name = it.name,
+              iconRes = it.iconRes,
+              iconUrl = "",
+              description = "Item especial com pose animada",
+              poseName = it.poseName.ifBlank { "Pose Especial" },
+              mediaUrl = it.mediaUrl
+            )
+          }
+
+          scope.launch {
+            repository.updateAccountIncludedItems(card.id, updatedItems)
+            isSaving = false
+            Toast.makeText(context, "Itens e poses salvos no Supabase!", Toast.LENGTH_SHORT).show()
+            onDismiss()
+          }
+        },
+        enabled = !isSaving,
+        colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+      ) {
+        if (isSaving) {
+          CircularProgressIndicator(color = White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        } else {
+          Text("Salvar no Supabase")
+        }
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancelar", color = Gray500)
+      }
+    }
+  )
+}
+

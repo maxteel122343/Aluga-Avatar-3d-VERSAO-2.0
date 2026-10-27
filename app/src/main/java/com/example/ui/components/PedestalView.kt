@@ -57,6 +57,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import coil.ImageLoader
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import androidx.compose.material.icons.filled.Close
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.IncludedItem
@@ -74,8 +81,22 @@ fun PedestalView(
   isOccupied: Boolean = false,
   currentUsers: Int = 1,
   onRentClick: () -> Unit,
+  onClearSelectedItem: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
+  val context = LocalContext.current
+  val gifImageLoader = remember(context) {
+    ImageLoader.Builder(context)
+      .components {
+        if (Build.VERSION.SDK_INT >= 28) {
+          add(ImageDecoderDecoder.Factory())
+        } else {
+          add(GifDecoder.Factory())
+        }
+      }
+      .build()
+  }
+
   var rotationAngle by remember { mutableFloatStateOf(0f) }
   var isDragging by remember { mutableStateOf(false) }
 
@@ -124,8 +145,45 @@ fun PedestalView(
         )
     )
 
-    // Character or 3D Model Display
-    if (show3DMode && has3DModel) {
+    // Center Display: Pose Preview GIF (when item selected) OR 3D Model / 2D Avatar
+    if (selectedItem != null) {
+      // 1. Interactive Pose Preview (GIF / Video) in place of 3D avatar on the pedestal
+      Box(
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(bottom = 24.dp)
+          .width(260.dp)
+          .height(300.dp),
+        contentAlignment = Alignment.BottomCenter
+      ) {
+        if (selectedItem.mediaUrl.isNotBlank()) {
+          AsyncImage(
+            model = ImageRequest.Builder(context)
+              .data(selectedItem.mediaUrl)
+              .crossfade(true)
+              .build(),
+            imageLoader = gifImageLoader,
+            contentDescription = "Preview de Pose: ${selectedItem.name}",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+          )
+        } else if (selectedItem.iconUrl.isNotBlank()) {
+          AsyncImage(
+            model = selectedItem.iconUrl,
+            contentDescription = selectedItem.name,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+          )
+        } else {
+          Image(
+            painter = painterResource(id = selectedItem.iconRes),
+            contentDescription = selectedItem.name,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+      }
+    } else if (show3DMode && has3DModel) {
       // 3D Model Viewer using WebGL / Google model-viewer inside transparent WebView
       Box(
         modifier = Modifier
@@ -352,7 +410,7 @@ fun PedestalView(
       ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+          modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 8.dp)
         ) {
           Icon(
             imageVector = Icons.Rounded.AutoAwesome,
@@ -362,11 +420,28 @@ fun PedestalView(
           )
           Spacer(modifier = Modifier.width(6.dp))
           Text(
-            text = "${selectedItem?.name} equipado!",
+            text = "Pose: ${selectedItem?.name}",
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = BluePrimary
           )
+          Spacer(modifier = Modifier.width(8.dp))
+          Surface(
+            color = BluePrimary,
+            shape = CircleShape,
+            modifier = Modifier
+              .size(20.dp)
+              .clickable { onClearSelectedItem() }
+          ) {
+            Box(contentAlignment = Alignment.Center) {
+              Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Voltar ao Avatar",
+                tint = White,
+                modifier = Modifier.size(12.dp)
+              )
+            }
+          }
         }
       }
     }

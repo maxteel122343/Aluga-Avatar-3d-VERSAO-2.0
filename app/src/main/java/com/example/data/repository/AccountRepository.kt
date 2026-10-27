@@ -231,18 +231,27 @@ class AccountRepository(private val context: Context) {
     avatarUrl: String = "",
     model3dUrl: String = "",
     username: String,
-    pass: String
+    pass: String,
+    customItems: List<IncludedItem>? = null
   ): Result<SharedAccount> {
     val currentUserId = sessionManager.currentSession.value?.userId
     val token = sessionManager.currentSession.value?.accessToken
 
     val newId = "acc_" + UUID.randomUUID().toString().take(8)
     val defaultItems = listOf(
-      IncludedItem(newId + "_item1", "Item Básico", R.drawable.item_hat, "", "Acessório padrão", "Pose Aventura"),
-      IncludedItem(newId + "_item2", "Mochila Pro", R.drawable.item_backpack, "", "Inventário expandido", "Pose Viagem"),
-      IncludedItem(newId + "_item3", "Acesso VIP", R.drawable.item_boots, "", "Passes e benefícios", "Pose Caminhada"),
-      IncludedItem(newId + "_item4", "Guia Rápido", R.drawable.item_map, "", "Instruções passo a passo", "Pose Exploração")
+      IncludedItem(newId + "_item1", "Item Básico", R.drawable.item_hat, "", "Acessório padrão", "Pose Aventura", "https://media.giphy.com/media/3o7TKTDnUxE0g2fSE8/giphy.gif"),
+      IncludedItem(newId + "_item2", "Mochila Pro", R.drawable.item_backpack, "", "Inventário expandido", "Pose Viagem", "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif"),
+      IncludedItem(newId + "_item3", "Acesso VIP", R.drawable.item_boots, "", "Passes e benefícios", "Pose Caminhada", "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif"),
+      IncludedItem(newId + "_item4", "Guia Rápido", R.drawable.item_map, "", "Instruções passo a passo", "Pose Exploração", "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif")
     )
+
+    val finalItems = if (!customItems.isNullOrEmpty()) {
+      customItems.mapIndexed { idx, it ->
+        it.copy(id = if (it.id.isNotBlank()) it.id else "${newId}_custom_${idx + 1}")
+      }
+    } else {
+      defaultItems
+    }
 
     val newAccount = SharedAccount(
       id = newId,
@@ -261,7 +270,7 @@ class AccountRepository(private val context: Context) {
       avatarDrawableRes = avatarRes,
       avatarUrl = avatarUrl,
       model3dUrl = model3dUrl,
-      itemsIncluded = defaultItems,
+      itemsIncluded = finalItems,
       credentials = AccountCredentials(
         username = username.ifBlank { "user_shared_" + (100..999).random() },
         password = pass.ifBlank { generateSecurePassword() },
@@ -364,6 +373,25 @@ class AccountRepository(private val context: Context) {
     postNotification(
       title = "Preços Atualizados",
       message = "Regras de preço e desconto progressivo salvas com sucesso.",
+      type = NotificationType.SUCCESS
+    )
+    return res
+  }
+
+  suspend fun updateAccountIncludedItems(
+    accountId: String,
+    items: List<IncludedItem>
+  ): Result<Boolean> {
+    val token = sessionManager.currentSession.value?.accessToken
+    _accounts.value = _accounts.value.map { acc ->
+      if (acc.id == accountId) {
+        acc.copy(itemsIncluded = items)
+      } else acc
+    }
+    val res = supabase.replaceIncludedItems(accountId, items, token)
+    postNotification(
+      title = "Itens Atualizados",
+      message = "Os itens incluídos e previews de pose foram salvos no Supabase.",
       type = NotificationType.SUCCESS
     )
     return res

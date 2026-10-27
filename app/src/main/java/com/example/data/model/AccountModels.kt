@@ -28,7 +28,8 @@ data class IncludedItem(
   val iconRes: Int = 0,
   val iconUrl: String = "",
   val description: String = "",
-  val poseName: String = ""
+  val poseName: String = "",
+  val mediaUrl: String = ""
 )
 
 data class AccountCredentials(
