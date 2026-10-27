@@ -1,0 +1,8 @@
+{
+  "name": "Remix AlugaConta",
+  "description": "Aluguel de contas compartilhadas com avatar 3D no pedestal, calculadora de valor em tempo real e entrega imediata de credenciais.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
